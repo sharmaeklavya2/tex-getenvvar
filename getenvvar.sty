@@ -1,0 +1,63 @@
+% getenvvar: Get environment variables
+%
+% Provides the macro \getEnvVar. It takes two parameters #1 and #2, where
+% #1 is a control sequence that will get the value of environment variable #2.
+%
+% Example TeX code:
+% \getEnvVar{\myHome}{HOME}
+% My home directory is at \myHome.
+%
+% In LaTeX, use \usepackage{getenvvar}, and in plain TeX, use \input getenvvar.sty.
+%
+% getenvvar tries to use commands from package expl3.
+% If expl3 is not available, which only happens for old TeX distributions,
+% getenvvar falls back to other methods that only work for pdflatex, luatex and lualatex.
+
+% Detect existence of commands. Copied from iftex.sty.
+\def\makeTrue#1{\expandafter\let\csname #1\expandafter\endcsname\csname iftrue\endcsname}
+\def\makeFalse#1{\expandafter\let\csname #1\expandafter\endcsname\csname iffalse\endcsname}
+\def\myDetectCommand#1#2{% if command #1 exists, sets #2 to \iftrue or \iffalse
+\begingroup\expandafter\expandafter\expandafter\endgroup
+\expandafter\ifx\csname #1\endcsname\relax
+\makeFalse{#2}\else\makeTrue{#2}\fi}
+
+% declare package
+\myDetectCommand{newcommand}{myIfLaTeX}
+\myIfLaTeX
+    \NeedsTeXFormat{LaTeX2e}
+    \ProvidesPackage{getenvvar}[2020/09/17 Get environment variables]
+\fi
+
+% check if expl3 is available
+\newread\myFile
+\openin\myFile=expl3-generic.tex
+\ifeof\myFile
+    \makeFalse{ifHasLIII}
+\else
+    \closein\myFile
+    \makeTrue{ifHasLIII}
+\fi
+
+% If expl3 exists, load it appropriately and use it to define getEnvVar.
+% Otherwise, use workarounds for luatex and pdflatex.
+\myDetectCommand{directlua}{myIfLuaTeX}
+\ifHasLIII
+    \message{getEnvVar: expl3 detected}
+    \myIfLaTeX
+        \RequirePackage{expl3}
+    \else
+        \input expl3-generic
+    \fi
+    \ExplSyntaxOn
+    \def\getEnvVar#1#2{\sys_get_shell:nnN{ kpsewhich ~ -var-value ~ #2 }{\endlinechar=-1}#1}
+    \ExplSyntaxOff
+\else
+    \message{getEnvVar: expl3 not found}
+    \myIfLuaTeX
+        \def\getEnvVar#1#2{\edef#1{\directlua{tex.sprint(
+            kpse.var_value("\luaescapestring{#2}") or "" ) }}}
+    \else
+        \RequirePackage{catchfile}
+        \def\getEnvVar#1#2{\CatchFileEdef{#1}{"|kpsewhich -var-value #2"}{\endlinechar=-1}}
+    \fi
+\fi
